@@ -169,13 +169,13 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
     // CN: 生成随机 IV（12 字节用于 GCM）| EN: Generate random IV (12 bytes for GCM)
     std::string iv(12, '\0');
 #ifdef _WIN32
-    NTSTATUS status = BCryptGenRandom(
+    NTSTATUS ivStatus = BCryptGenRandom(
         nullptr,
         reinterpret_cast<PUCHAR>(const_cast<char*>(iv.data())),
         12,
         BCRYPT_USE_SYSTEM_PREFERRED_RNG
     );
-    if (!BCRYPT_SUCCESS(status)) {
+    if (!BCRYPT_SUCCESS(ivStatus)) {
         return std::string();
     }
 #else
@@ -184,10 +184,19 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
     }
 #endif
 
-    // CN: 加密 | EN: Encryption
-    std::string ciphertext(plaintext.size() + 16, '\0');  // +16 for GCM tag
+    // CN: 计算并分配完整的全额缓冲区：12字节 IV + 明文长度 + 16字节 GCM Tag
+    // EN: Calculate and allocate the full final payload buffer: 12-byte IV + plaintext length + 16-byte GCM Tag
+    size_t cipherLen = plaintext.size();
+    std::string finalPayload;
+    finalPayload.resize(12 + cipherLen + 16);
     
 #ifdef _WIN32
+    // CN: 拷贝 IV 到 finalPayload 起始位置
+    // EN: Copy IV to the start of finalPayload
+    memcpy(&finalPayload[0], iv.data(), 12);
+    
+    NTSTATUS status = STATUS_UNSUCCESSFUL;
+    ULONG cbResult = 0;
     BCRYPT_ALG_HANDLE hAlg = nullptr;
     BCRYPT_KEY_HANDLE hKey = nullptr;
     
@@ -206,14 +215,18 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
         BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO authInfo;
         BCRYPT_INIT_AUTH_MODE_INFO(authInfo);
         authInfo.cbSize = sizeof(BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO);
-        authInfo.pbNonce = (PUCHAR)iv.data();
-        authInfo.cbNonce = iv.size();
-        authInfo.pbTag = (PUCHAR)ciphertext.data() + plaintext.size();
+        authInfo.pbNonce = reinterpret_cast<PUCHAR>(&finalPayload[0]);
+        authInfo.cbNonce = 12;
+        authInfo.pbTag = reinterpret_cast<PUCHAR>(&finalPayload[12 + cipherLen]);
         authInfo.cbTag = 16;
         
-        ULONG cbResult = 0;
-        status = BCryptEncrypt(hKey, (PUCHAR)plaintext.data(), plaintext.size(),
-            &authInfo, nullptr, 0, (PUCHAR)ciphertext.data(), ciphertext.size(), &cbResult, 0);
+        status = BCryptEncrypt(hKey, 
+            reinterpret_cast<PUCHAR>(const_cast<char*>(plaintext.data())), 
+            static_cast<ULONG>(cipherLen),
+            &authInfo, nullptr, 0, 
+            reinterpret_cast<PUCHAR>(&finalPayload[12]), 
+            static_cast<ULONG>(cipherLen), 
+            &cbResult, 0);
         
     } while (false);
     
@@ -224,8 +237,14 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
         return std::string();
     }
     
-    ciphertext.resize(plaintext.size());  // CN: 只保留 ciphertext，tag 在后面 | EN: Keep only ciphertext, tag follows
+    return Base64Encode(reinterpret_cast<const uint8_t*>(finalPayload.data()), finalPayload.size());
 #else
+    // CN: OpenSSL 分支：使用绝对坐标布局
+    // EN: OpenSSL branch: Use absolute coordinate layout
+    std::string opensslPayload;
+    opensslPayload.resize(12 + cipherLen + 16);
+    memcpy(&opensslPayload[0], iv.data(), 12);
+    
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if (!ctx) return std::string();
     
@@ -239,33 +258,26 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
         return std::string();
     }
     
-    if (EVP_EncryptUpdate(ctx, (unsigned char*)ciphertext.data(), &len,
-        reinterpret_cast<const unsigned char*>(plaintext.data()), plaintext.size()) != 1) {
+    if (EVP_EncryptUpdate(ctx, reinterpret_cast<unsigned char*>(&opensslPayload[12]), &len,
+        reinterpret_cast<const unsigned char*>(plaintext.data()), static_cast<int>(cipherLen)) != 1) {
         EVP_CIPHER_CTX_free(ctx);
         return std::string();
     }
     ciphertext_len = len;
     
-    if (EVP_EncryptFinal_ex(ctx, (unsigned char*)ciphertext.data() + ciphertext_len, &len) != 1) {
+    if (EVP_EncryptFinal_ex(ctx, reinterpret_cast<unsigned char*>(&opensslPayload[12]) + ciphertext_len, &len) != 1) {
         EVP_CIPHER_CTX_free(ctx);
         return std::string();
     }
     ciphertext_len += len;
     
     // CN: 获取 GCM tag | EN: Get GCM tag
-    unsigned char tag[16];
-    EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, tag);
+    EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, reinterpret_cast<unsigned char*>(&opensslPayload[12 + ciphertext_len]));
     
     EVP_CIPHER_CTX_free(ctx);
     
-    ciphertext.resize(ciphertext_len);
-    // CN: 附加 tag 到 ciphertext | EN: Append tag to ciphertext
-    ciphertext.append(reinterpret_cast<char*>(tag), 16);
+    return Base64Encode(reinterpret_cast<const uint8_t*>(opensslPayload.data()), opensslPayload.size());
 #endif
-
-    // CN: 组装输出：IV + Ciphertext + Tag | EN: Assemble output: IV + Ciphertext + Tag
-    std::string output = iv + ciphertext;
-    return Base64Encode(reinterpret_cast<const uint8_t*>(output.data()), output.size());
 }
 
 std::string CryptoCore::Decrypt(const std::string& base64Cipher, const std::string& key) {
@@ -275,27 +287,26 @@ std::string CryptoCore::Decrypt(const std::string& base64Cipher, const std::stri
 
     // CN: Base64 解码 | EN: Base64 decode
     auto decoded = Base64Decode(base64Cipher);
-    if (decoded.size() < 12 + 16) {  // CN: 至少 IV(12) + Tag(16) | EN: At least IV(12) + Tag(16)
+
+    // CN: 基础长度合法性边界检查，负载必须大于 IV(12) + Tag(16)
+    // EN: Fundamental length validity boundary check; payload must be larger than IV(12) + Tag(16)
+    if (decoded.size() < 28) {
         return std::string();
     }
 
-    // CN: 提取 IV | EN: Extract IV
-    std::string iv(decoded.begin(), decoded.begin() + 12);
-    
-    // CN: 提取 Ciphertext + Tag | EN: Extract Ciphertext + Tag
-    std::string cipherWithTag(decoded.begin() + 12, decoded.end());
-    std::string ciphertext(cipherWithTag.begin(), cipherWithTag.end() - 16);
-    std::string tag(cipherWithTag.end() - 16, cipherWithTag.end());
+    // CN: 计算纯密文长度：总长度 - 12字节 IV - 16字节 Tag
+    // EN: Calculate pure ciphertext length: total length - 12-byte IV - 16-byte Tag
+    size_t cipherLen = decoded.size() - 12 - 16;
 
-    std::string plaintext(cipherWithTag.size() - 16, '\0');
+    // CN: 分配明文输出缓冲区
+    // EN: Allocate plaintext output buffer
+    std::string plaintext(cipherLen, '\0');
 
 #ifdef _WIN32
+    NTSTATUS status = STATUS_UNSUCCESSFUL;
+    ULONG cbResult = 0;
     BCRYPT_ALG_HANDLE hAlg = nullptr;
     BCRYPT_KEY_HANDLE hKey = nullptr;
-    NTSTATUS status = STATUS_UNSUCCESSFUL;
-    // CN: 将 cbResult 提升到 do 块外部，确保后续 plaintext.resize(cbResult) 能正确访问，修复作用域逃逸
-    // EN: Elevate cbResult outside the do-block to ensure subsequent plaintext.resize(cbResult) can access it, fixing scope escape
-    ULONG cbResult = 0;
     
     do {
         status = BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_AES_ALGORITHM, nullptr, 0);
@@ -312,13 +323,24 @@ std::string CryptoCore::Decrypt(const std::string& base64Cipher, const std::stri
         BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO authInfo;
         BCRYPT_INIT_AUTH_MODE_INFO(authInfo);
         authInfo.cbSize = sizeof(BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO);
-        authInfo.pbNonce = (PUCHAR)iv.data();
-        authInfo.cbNonce = iv.size();
-        authInfo.pbTag = (PUCHAR)tag.data();
-        authInfo.cbTag = tag.size();
+        // CN: 精准锚定 IV 坐标：从 decodedPayload[0] 读取 12 字节
+        // EN: Precisely anchor IV coordinate: read 12 bytes from decodedPayload[0]
+        authInfo.pbNonce = reinterpret_cast<PUCHAR>(decoded.data());
+        authInfo.cbNonce = 12;
+        // CN: 精准锚定 Tag 坐标：从 decodedPayload[12 + cipherLen] 读取 16 字节
+        // EN: Precisely anchor Tag coordinate: read 16 bytes from decodedPayload[12 + cipherLen]
+        authInfo.pbTag = reinterpret_cast<PUCHAR>(&decoded[12 + cipherLen]);
+        authInfo.cbTag = 16;
         
-        status = BCryptDecrypt(hKey, (PUCHAR)ciphertext.data(), ciphertext.size(),
-            &authInfo, nullptr, 0, (PUCHAR)plaintext.data(), plaintext.size(), &cbResult, 0);
+        // CN: 精准锚定密文解密区：从 decodedPayload[12] 读取 cipherLen 字节
+        // EN: Precisely anchor ciphertext decryption area: read cipherLen bytes from decodedPayload[12]
+        status = BCryptDecrypt(hKey,
+            reinterpret_cast<PUCHAR>(&decoded[12]),
+            static_cast<ULONG>(cipherLen),
+            &authInfo, nullptr, 0,
+            reinterpret_cast<PUCHAR>(const_cast<char*>(plaintext.data())),
+            static_cast<ULONG>(cipherLen),
+            &cbResult, 0);
         
     } while (false);
     
@@ -329,8 +351,16 @@ std::string CryptoCore::Decrypt(const std::string& base64Cipher, const std::stri
         return std::string();
     }
     
-    plaintext.resize(cbResult);
+    // CN: 解密成功后，根据返回的 cbResult 对明文传出缓冲区进行裁剪
+    // EN: After successful decryption, resize the plaintext output buffer according to the returned cbResult
+    plaintext.resize(static_cast<size_t>(cbResult));
 #else
+    // CN: OpenSSL 分支：使用绝对坐标拆解
+    // EN: OpenSSL branch: Use absolute coordinate decomposition
+    std::string ivStr(decoded.begin(), decoded.begin() + 12);
+    std::string ciphertextStr(decoded.begin() + 12, decoded.begin() + 12 + cipherLen);
+    std::string tagStr(decoded.begin() + 12 + cipherLen, decoded.end());
+
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if (!ctx) return std::string();
     
@@ -339,20 +369,20 @@ std::string CryptoCore::Decrypt(const std::string& base64Cipher, const std::stri
     
     if (EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr,
         reinterpret_cast<const unsigned char*>(key.data()),
-        reinterpret_cast<const unsigned char*>(iv.data())) != 1) {
+        reinterpret_cast<const unsigned char*>(ivStr.data())) != 1) {
         EVP_CIPHER_CTX_free(ctx);
         return std::string();
     }
     
     if (EVP_DecryptUpdate(ctx, (unsigned char*)plaintext.data(), &len,
-        reinterpret_cast<const unsigned char*>(ciphertext.data()), ciphertext.size()) != 1) {
+        reinterpret_cast<const unsigned char*>(ciphertextStr.data()), ciphertextStr.size()) != 1) {
         EVP_CIPHER_CTX_free(ctx);
         return std::string();
     }
     plaintext_len = len;
     
     // CN: 设置 GCM tag | EN: Set GCM tag
-    EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, tag.data());
+    EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, const_cast<char*>(tagStr.data()));
     
     if (EVP_DecryptFinal_ex(ctx, (unsigned char*)plaintext.data() + plaintext_len, &len) != 1) {
         EVP_CIPHER_CTX_free(ctx);
