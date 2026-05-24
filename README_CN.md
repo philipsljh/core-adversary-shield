@@ -259,7 +259,7 @@ go build -o server && ./server
 
 ## 免责声明
 
-> **? 架构解耦说明 (Architecture Stub Notice)**:
+> **?? 架构解耦说明 (Architecture Stub Notice)**:
 > 开源版本中的 `AuthGateway` 采用安全空转（Stub）实现并返回标准 Mock 响应，旨在展示全栈通信流契约。
 > 生产环境部署时，请根据组织内部实际的基础设施（如 WinHTTP、cURL 传输层及企业级 API 网关）自行接入真实的物理网络分发链。
 
