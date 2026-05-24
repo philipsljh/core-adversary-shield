@@ -166,7 +166,6 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
         return std::string();
     }
 
-    // CN: 生成随机 IV（12 字节用于 GCM）| EN: Generate random IV (12 bytes for GCM)
     std::string iv(12, '\0');
 #ifdef _WIN32
     NTSTATUS ivStatus = BCryptGenRandom(
@@ -184,15 +183,11 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
     }
 #endif
 
-    // CN: 计算并分配完整的全额缓冲区：12字节 IV + 明文长度 + 16字节 GCM Tag
-    // EN: Calculate and allocate the full final payload buffer: 12-byte IV + plaintext length + 16-byte GCM Tag
     size_t cipherLen = plaintext.size();
     std::string finalPayload;
     finalPayload.resize(12 + cipherLen + 16);
     
 #ifdef _WIN32
-    // CN: 拷贝 IV 到 finalPayload 起始位置
-    // EN: Copy IV to the start of finalPayload
     memcpy(&finalPayload[0], iv.data(), 12);
     
     NTSTATUS status = STATUS_UNSUCCESSFUL;
@@ -239,8 +234,6 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
     
     return Base64Encode(reinterpret_cast<const uint8_t*>(finalPayload.data()), finalPayload.size());
 #else
-    // CN: OpenSSL 分支：使用绝对坐标布局
-    // EN: OpenSSL branch: Use absolute coordinate layout
     std::string opensslPayload;
     opensslPayload.resize(12 + cipherLen + 16);
     memcpy(&opensslPayload[0], iv.data(), 12);
@@ -271,7 +264,6 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
     }
     ciphertext_len += len;
     
-    // CN: 获取 GCM tag | EN: Get GCM tag
     EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, reinterpret_cast<unsigned char*>(&opensslPayload[12 + ciphertext_len]));
     
     EVP_CIPHER_CTX_free(ctx);
@@ -285,21 +277,14 @@ std::string CryptoCore::Decrypt(const std::string& base64Cipher, const std::stri
         return std::string();
     }
 
-    // CN: Base64 解码 | EN: Base64 decode
     auto decoded = Base64Decode(base64Cipher);
 
-    // CN: 基础长度合法性边界检查，负载必须大于 IV(12) + Tag(16)
-    // EN: Fundamental length validity boundary check; payload must be larger than IV(12) + Tag(16)
     if (decoded.size() < 28) {
         return std::string();
     }
 
-    // CN: 计算纯密文长度：总长度 - 12字节 IV - 16字节 Tag
-    // EN: Calculate pure ciphertext length: total length - 12-byte IV - 16-byte Tag
     size_t cipherLen = decoded.size() - 12 - 16;
 
-    // CN: 分配明文输出缓冲区
-    // EN: Allocate plaintext output buffer
     std::string plaintext(cipherLen, '\0');
 
 #ifdef _WIN32
@@ -323,17 +308,11 @@ std::string CryptoCore::Decrypt(const std::string& base64Cipher, const std::stri
         BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO authInfo;
         BCRYPT_INIT_AUTH_MODE_INFO(authInfo);
         authInfo.cbSize = sizeof(BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO);
-        // CN: 精准锚定 IV 坐标：从 decodedPayload[0] 读取 12 字节
-        // EN: Precisely anchor IV coordinate: read 12 bytes from decodedPayload[0]
         authInfo.pbNonce = reinterpret_cast<PUCHAR>(decoded.data());
         authInfo.cbNonce = 12;
-        // CN: 精准锚定 Tag 坐标：从 decodedPayload[12 + cipherLen] 读取 16 字节
-        // EN: Precisely anchor Tag coordinate: read 16 bytes from decodedPayload[12 + cipherLen]
         authInfo.pbTag = reinterpret_cast<PUCHAR>(&decoded[12 + cipherLen]);
         authInfo.cbTag = 16;
         
-        // CN: 精准锚定密文解密区：从 decodedPayload[12] 读取 cipherLen 字节
-        // EN: Precisely anchor ciphertext decryption area: read cipherLen bytes from decodedPayload[12]
         status = BCryptDecrypt(hKey,
             reinterpret_cast<PUCHAR>(&decoded[12]),
             static_cast<ULONG>(cipherLen),
@@ -351,12 +330,8 @@ std::string CryptoCore::Decrypt(const std::string& base64Cipher, const std::stri
         return std::string();
     }
     
-    // CN: 解密成功后，根据返回的 cbResult 对明文传出缓冲区进行裁剪
-    // EN: After successful decryption, resize the plaintext output buffer according to the returned cbResult
     plaintext.resize(static_cast<size_t>(cbResult));
 #else
-    // CN: OpenSSL 分支：使用绝对坐标拆解
-    // EN: OpenSSL branch: Use absolute coordinate decomposition
     std::string ivStr(decoded.begin(), decoded.begin() + 12);
     std::string ciphertextStr(decoded.begin() + 12, decoded.begin() + 12 + cipherLen);
     std::string tagStr(decoded.begin() + 12 + cipherLen, decoded.end());
