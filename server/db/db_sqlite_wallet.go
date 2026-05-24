@@ -1,12 +1,13 @@
 // db_sqlite_wallet.go
-// High-concurrency Database Deadlock Isolation Layer
+// CN: 高并发数据库死锁隔离层 | EN: High-concurrency Database Deadlock Isolation Layer
 //
-// Pure Go implementation of SQLite safe write wrapper with explicit
-// BEGIN IMMEDIATE transactions. Implements exponential backoff retry
-// with random jitter (20-80ms) on SQLITE_BUSY errors.
+// CN: 纯 Go 实现的 SQLite 安全写入包装器，使用显式 BEGIN IMMEDIATE 事务。
+// EN: Pure Go implementation of SQLite safe write wrapper with explicit BEGIN IMMEDIATE transactions.
+// CN: 在 SQLITE_BUSY 错误上实现带随机抖动（20-80ms）的指数退避重试。
+// EN: Implements exponential backoff retry with random jitter (20-80ms) on SQLITE_BUSY errors.
 //
-// This module provides industrial-grade deadlock-free write operations
-// for policy state persistence and audit log storage.
+// CN: 本模块为策略状态持久化和审计日志存储提供工业级无死锁写操作。
+// EN: This module provides industrial-grade deadlock-free write operations for policy state persistence and audit log storage.
 
 package db
 
@@ -24,64 +25,65 @@ import (
 )
 
 // ============================================================================
-// Configuration constants
+// CN: 配置常量 | EN: Configuration constants
 // ============================================================================
 
 const (
-	// DefaultDBPath default database path (relative path, sanitized)
+	// CN: DefaultDBPath 默认数据库路径（相对路径，已净化）| EN: DefaultDBPath default database path (relative path, sanitized)
 	DefaultDBPath = "./data/store.db"
 
-	// MaxRetryAttempts maximum retry attempts before giving up
+	// CN: MaxRetryAttempts 放弃前的最大重试次数 | EN: MaxRetryAttempts maximum retry attempts before giving up
 	MaxRetryAttempts = 5
 
-	// BaseRetryDelay base retry delay in milliseconds
+	// CN: BaseRetryDelay 基础重试延迟（毫秒）| EN: BaseRetryDelay base retry delay in milliseconds
 	BaseRetryDelay = 20 * time.Millisecond
 
-	// MaxRetryDelay maximum retry delay cap
+	// CN: MaxRetryDelay 最大重试延迟上限 | EN: MaxRetryDelay maximum retry delay cap
 	MaxRetryDelay = 80 * time.Millisecond
 
-	// BusyTimeout SQLite built-in busy wait timeout in milliseconds
+	// CN: BusyTimeout SQLite 内置的忙等待超时时间（毫秒）| EN: BusyTimeout SQLite built-in busy wait timeout in milliseconds
 	BusyTimeout = 3000
 
-	// WALJournalMode Write-Ahead Logging mode for better concurrent read/write
+	// CN: WALJournalMode 预写式日志模式，用于更好的并发读写 | EN: WALJournalMode Write-Ahead Logging mode for better concurrent read/write
 	WALJournalMode = "WAL"
 
-	// SynchronousNormal normal sync mode, balances performance and safety
+	// CN: SynchronousNormal 普通同步模式，平衡性能和安全性 | EN: SynchronousNormal normal sync mode, balances performance and safety
 	SynchronousNormal = "NORMAL"
 
-	// CacheSize page cache size (2000 pages)
+	// CN: CacheSize 页面缓存大小（2000 页）| EN: CacheSize page cache size (2000 pages)
 	CacheSize = -2000
 
-	// TempStore memory temp store for better sort/temp table performance
+	// CN: TempStore 内存临时存储，用于更好的排序/临时表性能 | EN: TempStore memory temp store for better sort/temp table performance
 	TempStore = "MEMORY"
 )
 
 // ============================================================================
-// Global database instance
+// CN: 全局数据库实例 | EN: Global database instance
 // ============================================================================
 
 var (
-	// DB global database connection pool
+	// CN: DB 全局数据库连接池 | EN: DB global database connection pool
 	DB *sql.DB
 
-	// dbInitOnce ensures database is initialized only once
+	// CN: dbInitOnce 确保数据库只初始化一次 | EN: dbInitOnce ensures database is initialized only once
 	dbInitOnce sync.Once
 
-	// dbInitErr initialization error
+	// CN: dbInitErr 初始化错误 | EN: dbInitErr initialization error
 	dbInitErr error
 )
 
 // ============================================================================
-// Safe write wrapper
+// CN: 安全写入包装器 | EN: Safe write wrapper
 // ============================================================================
 
-// SafeWrite executes a database write operation with automatic transaction
-// and SQLITE_BUSY retry with exponential backoff.
+// CN: SafeWrite 执行数据库写操作，自动事务处理和 SQLITE_BUSY 重试，带指数退避
+// EN: SafeWrite executes a database write operation with automatic transaction and SQLITE_BUSY retry with exponential backoff.
 func SafeWrite(operation func(tx *sql.Tx) error) error {
 	return SafeWriteWithContext(context.Background(), operation)
 }
 
-// SafeWriteWithContext safe write operation with context support
+// CN: SafeWriteWithContext 支持上下文的的安全写操作
+// EN: SafeWriteWithContext safe write operation with context support
 func SafeWriteWithContext(ctx context.Context, operation func(tx *sql.Tx) error) error {
 	var lastErr error
 
@@ -124,8 +126,10 @@ func SafeWriteWithContext(ctx context.Context, operation func(tx *sql.Tx) error)
 	return fmt.Errorf("db write failed, max retries exceeded (%d): %v", MaxRetryAttempts+1, lastErr)
 }
 
-// tryWriteOnce executes a single transaction attempt
-// With _txlock=immediate DSN parameter, BeginTx automatically acquires RESERVED lock
+// CN: tryWriteOnce 执行单次事务尝试
+// EN: tryWriteOnce executes a single transaction attempt
+// CN: 使用 _txlock=immediate DSN 参数，BeginTx 自动获取 RESERVED 锁
+// EN: With _txlock=immediate DSN parameter, BeginTx automatically acquires RESERVED lock
 func tryWriteOnce(ctx context.Context, operation func(tx *sql.Tx) error) error {
 	tx, err := DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -150,7 +154,7 @@ func tryWriteOnce(ctx context.Context, operation func(tx *sql.Tx) error) error {
 }
 
 // ============================================================================
-// Exponential backoff + Random Jitter
+// CN: 指数退避 + 随机抖动 | EN: Exponential backoff + Random Jitter
 // ============================================================================
 
 func calculateRetryDelay(attempt int) time.Duration {
@@ -171,7 +175,7 @@ func calculateRetryDelay(attempt int) time.Duration {
 }
 
 // ============================================================================
-// SQLITE_BUSY error detection
+// CN: SQLITE_BUSY 错误检测 | EN: SQLITE_BUSY error detection
 // ============================================================================
 
 func isBusyError(err error) bool {
@@ -196,15 +200,17 @@ func isBusyError(err error) bool {
 }
 
 // ============================================================================
-// Database initialization
+// CN: 数据库初始化 | EN: Database initialization
 // ============================================================================
 
-// InitDB initializes the global database connection with default path
+// CN: InitDB 使用默认路径初始化全局数据库连接
+// EN: InitDB initializes the global database connection with default path
 func InitDB() error {
 	return InitDBWithPath(DefaultDBPath)
 }
 
-// InitDBWithPath initializes the global database connection with specified path
+// CN: InitDBWithPath 使用指定路径初始化全局数据库连接
+// EN: InitDBWithPath initializes the global database connection with specified path
 func InitDBWithPath(dbPath string) error {
 	dbInitOnce.Do(func() {
 		dbInitErr = initDBInternal(dbPath)
@@ -243,15 +249,17 @@ func initDBInternal(dbPath string) error {
 }
 
 // ============================================================================
-// Convenience query functions (read-only, no transaction needed)
+// CN: 便捷查询函数（只读，无需事务）| EN: Convenience query functions (read-only, no transaction needed)
 // ============================================================================
 
-// QueryRowSafe executes a safe read-only query returning a single row
+// CN: QueryRowSafe 执行安全的只读查询，返回单行
+// EN: QueryRowSafe executes a safe read-only query returning a single row
 func QueryRowSafe(query string, args ...interface{}) *sql.Row {
 	return DB.QueryRow(query, args...)
 }
 
-// ExecSafe executes a safe write operation wrapped in SafeWrite
+// CN: ExecSafe 执行包装在 SafeWrite 中的安全写操作
+// EN: ExecSafe executes a safe write operation wrapped in SafeWrite
 func ExecSafe(query string, args ...interface{}) error {
 	return SafeWrite(func(tx *sql.Tx) error {
 		_, err := tx.Exec(query, args...)
@@ -260,10 +268,11 @@ func ExecSafe(query string, args ...interface{}) error {
 }
 
 // ============================================================================
-// Graceful shutdown
+// CN: 优雅关闭 | EN: Graceful shutdown
 // ============================================================================
 
-// CloseDB gracefully closes the database connection
+// CN: CloseDB 优雅关闭数据库连接
+// EN: CloseDB gracefully closes the database connection
 func CloseDB() error {
 	if DB == nil {
 		return nil

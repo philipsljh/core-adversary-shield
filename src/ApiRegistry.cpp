@@ -1,8 +1,9 @@
 /**
  * @file ApiRegistry.cpp
- * @brief API 注册中心实现 - 39 个原子 API 元数据
+ * @brief CN: API 注册中心实现 - 39 个原子 API 元数据 | EN: API registry implementation - 39 atomic API metadata
  *
- * 企业级应用加固组件 - 动态策略编排 API 注册中心实现
+ * CN: 企业级应用加固组件 - 动态策略编排 API 注册中心实现
+ * EN: Enterprise-grade application hardening component - Dynamic policy orchestration API registry implementation.
  */
 
 #include "ApiRegistry.h"
@@ -10,11 +11,11 @@
 namespace csc {
 
 // ============================================================
-// 39 个原子 API 元数据表
+// CN: 39 个原子 API 元数据表 | EN: 39 Atomic API Metadata Table
 // ============================================================
 
 static const ApiMetadata API_METADATA_TABLE[] = {
-    // ========== 认证类 (Auth) ==========
+    // ========== CN: 认证类 (Auth) ==========
     { AtomicApiId::AUTHENTICATE,      "/api/v1/auth/authenticate",      "身份认证",           true,  true,  30000, 3 },
     { AtomicApiId::REFRESH_TOKEN,     "/api/v1/auth/refresh",           "令牌刷新",           true,  false, 15000, 2 },
     { AtomicApiId::REVOKE_TOKEN,      "/api/v1/auth/revoke",            "令牌吊销",           true,  false, 15000, 1 },
@@ -24,7 +25,7 @@ static const ApiMetadata API_METADATA_TABLE[] = {
     { AtomicApiId::QUERY_SESSION,     "/api/v1/auth/session",           "会话查询",           true,  false, 10000, 2 },
     { AtomicApiId::LOGOUT,            "/api/v1/auth/logout",            "登出",               true,  false, 10000, 1 },
 
-    // ========== 策略类 (Policy) ==========
+    // ========== CN: 策略类 (Policy) ==========
     { AtomicApiId::GET_POLICY,          "/api/v1/policy/get",           "策略获取",           true,  false, 15000, 2 },
     { AtomicApiId::UPDATE_POLICY,       "/api/v1/policy/update",        "策略更新",           true,  false, 30000, 1 },
     { AtomicApiId::EXECUTE_POLICY,      "/api/v1/policy/execute",       "策略执行",           true,  false, 60000, 1 },
@@ -34,7 +35,7 @@ static const ApiMetadata API_METADATA_TABLE[] = {
     { AtomicApiId::SIMULATE_POLICY,     "/api/v1/policy/simulate",      "策略模拟",           true,  false, 30000, 1 },
     { AtomicApiId::EXPORT_POLICY,       "/api/v1/policy/export",        "策略导出",           true,  false, 30000, 2 },
 
-    // ========== 资源类 (Resource) ==========
+    // ========== CN: 资源类 (Resource) ==========
     { AtomicApiId::GET_RESOURCE,    "/api/v1/resource/get",           "资源获取",           true,  false, 15000, 2 },
     { AtomicApiId::UPLOAD_RESOURCE, "/api/v1/resource/upload",        "资源上传",           true,  false, 60000, 1 },
     { AtomicApiId::DELETE_RESOURCE, "/api/v1/resource/delete",        "资源删除",           true,  false, 15000, 1 },
@@ -44,7 +45,7 @@ static const ApiMetadata API_METADATA_TABLE[] = {
     { AtomicApiId::LOCK_RESOURCE,   "/api/v1/resource/lock",          "资源锁定",           true,  false, 15000, 1 },
     { AtomicApiId::UNLOCK_RESOURCE, "/api/v1/resource/unlock",        "资源解锁",           true,  false, 15000, 1 },
 
-    // ========== 审计类 (Audit) ==========
+    // ========== CN: 审计类 (Audit) ==========
     { AtomicApiId::HEARTBEAT,       "/api/v1/audit/heartbeat",        "心跳校验",           true,  false, 10000, 3 },
     { AtomicApiId::REPORT_EVENT,    "/api/v1/audit/event",            "事件上报",           true,  false, 15000, 2 },
     { AtomicApiId::UPLOAD_LOG,      "/api/v1/audit/log",              "日志上传",           true,  false, 30000, 2 },
@@ -52,14 +53,14 @@ static const ApiMetadata API_METADATA_TABLE[] = {
     { AtomicApiId::REPORT_STATUS,   "/api/v1/audit/status",           "状态报告",           true,  false, 10000, 2 },
     { AtomicApiId::COLLECT_METRICS, "/api/v1/audit/metrics",          "指标采集",           true,  false, 15000, 2 },
 
-    // ========== 配置类 (Config) ==========
+    // ========== CN: 配置类 (Config) ==========
     { AtomicApiId::GET_CONFIG,      "/api/v1/config/get",             "配置获取",           true,  false, 10000, 2 },
     { AtomicApiId::UPDATE_CONFIG,   "/api/v1/config/update",          "配置更新",           true,  false, 15000, 1 },
     { AtomicApiId::RESET_CONFIG,    "/api/v1/config/reset",           "配置重置",           true,  false, 15000, 1 },
     { AtomicApiId::SYNC_CONFIG,     "/api/v1/config/sync",            "配置同步",           true,  false, 15000, 2 },
     { AtomicApiId::VALIDATE_CONFIG, "/api/v1/config/validate",        "配置验证",           true,  false, 10000, 2 },
 
-    // ========== 系统类 (System) ==========
+    // ========== CN: 系统类 (System) ==========
     { AtomicApiId::GET_SYSTEM_INFO, "/api/v1/system/info",            "系统信息",           false, false, 10000, 2 },
     { AtomicApiId::HEALTH_CHECK,    "/api/v1/system/health",          "健康检查",           false, false, 5000,  3 },
     { AtomicApiId::VERSION_CHECK,   "/api/v1/system/version",         "版本检查",           false, false, 10000, 2 },
@@ -69,7 +70,7 @@ static const ApiMetadata API_METADATA_TABLE[] = {
 static constexpr size_t API_METADATA_COUNT = sizeof(API_METADATA_TABLE) / sizeof(API_METADATA_TABLE[0]);
 
 // ============================================================
-// ApiRegistry 实现
+// CN: ApiRegistry 实现 | EN: ApiRegistry Implementation
 // ============================================================
 
 const ApiMetadata* ApiRegistry::getMetadata(AtomicApiId apiId) {

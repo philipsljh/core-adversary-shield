@@ -1,18 +1,22 @@
 // main.go
-// Enterprise Policy Orchestration Server - Entry Point
+// CN: 企业级策略编排服务器 - 入口文件 | EN: Enterprise Policy Orchestration Server - Entry Point
 //
-// This server implements a zero-trust policy orchestration framework with:
-// - Onion-model middleware pipeline (BaseInfo -> VerifyPoW -> Ticket)
-// - Ed25519 blind oracle digital signature issuance
-// - SQLite WAL industrial-grade deadlock-free write shell with exponential backoff
+// CN: 本服务器实现了零信任策略编排框架，包含：
+// EN: This server implements a zero-trust policy orchestration framework with:
+// - CN: 洋葱模型中间件管道（BaseInfo -> VerifyPoW -> Ticket）| EN: Onion-model middleware pipeline (BaseInfo -> VerifyPoW -> Ticket)
+// - CN: Ed25519 盲预言机数字签名签发 | EN: Ed25519 blind oracle digital signature issuance
+// - CN: SQLite WAL 工业级无死锁写外壳，带指数退避 | EN: SQLite WAL industrial-grade deadlock-free write shell with exponential backoff
 //
-// Start:
+// CN: 启动方式:
+// EN: Start:
 //   go run main.go
 //
-// Production:
+// CN: 生产环境:
+// EN: Production:
 //   go build -o server && ./server
 //
-// Dev mode (for testing only):
+// CN: 开发模式（仅用于测试）:
+// EN: Dev mode (for testing only):
 //   POLICY_SERVER_DEV_MODE=1 go run main.go
 
 package main
@@ -30,11 +34,13 @@ import (
 )
 
 // ============================================================================
-// Middleware: extract client IP
+// CN: 中间件：提取客户端 IP | EN: Middleware: extract client IP
 // ============================================================================
 
-// BaseInfoMiddleware extracts real client IP and injects into context
-// This is the first layer of the onion-model middleware pipeline
+// CN: BaseInfoMiddleware 提取真实客户端 IP 并注入到上下文中
+// EN: BaseInfoMiddleware extracts real client IP and injects into context
+// CN: 这是洋葱模型中间件管道的第一层
+// EN: This is the first layer of the onion-model middleware pipeline
 func BaseInfoMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientIP := utils.ExtractClientIP(r)
@@ -44,14 +50,17 @@ func BaseInfoMiddleware(next http.Handler) http.Handler {
 }
 
 // ============================================================================
-// Business Handler
+// CN: 业务处理器 | EN: Business Handler
 // ============================================================================
 
-// Handler defines business processors for policy orchestration
+// CN: Handler 定义了策略编排的业务处理器
+// EN: Handler defines business processors for policy orchestration
 type Handler struct{}
 
-// HandleGetTicket returns PoW Ticket to client
-// This endpoint issues a computational challenge for rate limiting
+// CN: HandleGetTicket 向客户端返回 PoW Ticket
+// EN: HandleGetTicket returns PoW Ticket to client
+// CN: 此端点发放计算挑战用于限流
+// EN: This endpoint issues a computational challenge for rate limiting
 func (h *Handler) HandleGetTicket(w http.ResponseWriter, r *http.Request) {
 	clientIP := utils.GetContextValue(r, utils.ClientIPKey)
 
@@ -67,15 +76,17 @@ func (h *Handler) HandleGetTicket(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HeartbeatRequest heartbeat request structure
+// CN: HeartbeatRequest 心跳请求结构体 | EN: HeartbeatRequest heartbeat request structure
 type HeartbeatRequest struct {
 	Username     string `json:"username"`
 	Nonce        string `json:"nonce"`
 	SessionToken string `json:"session_token"`
 }
 
-// HandleHeartbeat heartbeat endpoint: returns Ed25519 oracle signature
-// Dynamically extracts parameters from request body
+// CN: HandleHeartbeat 心跳端点：返回 Ed25519 预言机签名
+// EN: HandleHeartbeat heartbeat endpoint: returns Ed25519 oracle signature
+// CN: 从请求体中动态提取参数
+// EN: Dynamically extracts parameters from request body
 func (h *Handler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	clientIP := utils.GetContextValue(r, utils.ClientIPKey)
 
@@ -96,7 +107,7 @@ func (h *Handler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	expireTime := time.Now().Add(5 * time.Minute).Unix()
 
-	// Load policy hash from environment variable to avoid static feature exposure
+	// CN: 从环境变量加载策略哈希，避免静态特征暴露 | EN: Load policy hash from environment variable to avoid static feature exposure
 	policyHash := os.Getenv("POLICY_SERVER_RESOURCE_HASH")
 	if policyHash == "" {
 		slog.Warn("[Heartbeat] POLICY_SERVER_RESOURCE_HASH not set, using noise placeholder. " +
@@ -131,7 +142,7 @@ func (h *Handler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		"ip", clientIP)
 }
 
-// HandleHealth health check endpoint
+// CN: HandleHealth 健康检查端点 | EN: HandleHealth health check endpoint
 func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
@@ -139,22 +150,22 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // ============================================================================
-// Main function
+// CN: 主函数 | EN: Main function
 // ============================================================================
 
 func main() {
 	slog.Info("========================================")
-	slog.Info("Enterprise Policy Orchestration Server - Starting")
+	slog.Info("CN: 企业级策略编排服务器 - 启动中 | EN: Enterprise Policy Orchestration Server - Starting")
 	slog.Info("========================================")
 
 	pubKey := middleware.GetOraclePublicKey()
 	if pubKey == "" {
 		slog.Error("[Main] FATAL: Oracle Signer not ready. " +
 			"Set POLICY_SERVER_ED25519_PRIVATE_KEY (production) or POLICY_SERVER_DEV_MODE=1 (development)")
-		slog.Error("[Main] Server exiting.")
+		slog.Error("[Main] CN: 服务器正在退出 | EN: Server exiting.")
 		return
 	}
-	slog.Info("[Main] Oracle Signer ready", "public_key_prefix", pubKey[:16]+"...")
+	slog.Info("[Main] CN: 预言机签名器已就绪 | EN: Oracle Signer ready", "public_key_prefix", pubKey[:16]+"...")
 
 	handler := &Handler{}
 
@@ -162,11 +173,11 @@ func main() {
 
 	mux.HandleFunc("/health", handler.HandleHealth)
 
-	// Onion-model middleware pipeline: BaseInfo -> Handler
+	// CN: 洋葱模型中间件管道：BaseInfo -> Handler | EN: Onion-model middleware pipeline: BaseInfo -> Handler
 	mux.Handle("/api/v1/pow/ticket",
 		BaseInfoMiddleware(http.HandlerFunc(handler.HandleGetTicket)))
 
-	// Onion-model middleware pipeline: BaseInfo -> VerifyPoW -> Handler
+	// CN: 洋葱模型中间件管道：BaseInfo -> VerifyPoW -> Handler | EN: Onion-model middleware pipeline: BaseInfo -> VerifyPoW -> Handler
 	mux.Handle("/api/v1/auth/heartbeat",
 		BaseInfoMiddleware(
 			middleware.VerifyPoW(
@@ -175,9 +186,9 @@ func main() {
 		))
 
 	addr := ":8080"
-	slog.Info("[Main] HTTP server listening", "addr", addr)
+	slog.Info("[Main] CN: HTTP 服务器监听中 | EN: HTTP server listening", "addr", addr)
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		slog.Error("[Main] FATAL: HTTP server failed", "error", err)
+		slog.Error("[Main] FATAL: CN: HTTP 服务器失败 | EN: HTTP server failed", "error", err)
 	}
 }

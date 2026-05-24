@@ -1,11 +1,12 @@
 /**
  * @file CryptoCore.cpp
- * @brief 加密核心模块实现 - 密码学原语
+ * @brief CN: 加密核心模块实现 - 密码学原语 | EN: Cryptographic core module implementation - Cryptographic primitives
  *
- * 企业级应用加固组件 - 密码学原语实现
+ * CN: 企业级应用加固组件 - 密码学原语实现
+ * EN: Enterprise-grade application hardening component - Cryptographic primitives implementation.
  *
- * 注意：开源版本使用 OpenSSL 或标准库实现，
- * 生产版本可替换为硬件加速或国密算法
+ * CN: 注意：开源版本使用 OpenSSL 或标准库实现，生产版本可替换为硬件加速或国密算法
+ * EN: Note: Open-source version uses OpenSSL or standard library; production version can be replaced with hardware acceleration or national cryptographic algorithms.
  */
 
 #include "CryptoCore.h"
@@ -23,7 +24,7 @@
 #endif
 
 // ============================================================
-// 工具函数：Base64 编码/解码
+// CN: 工具函数：Base64 编码/解码 | EN: Utility Functions: Base64 Encode/Decode
 // ============================================================
 
 static const char* BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -108,7 +109,7 @@ static std::vector<uint8_t> Base64Decode(const std::string& encoded_string) {
 }
 
 // ============================================================
-// CryptoCore 实现
+// CN: CryptoCore 实现 | EN: CryptoCore Implementation
 // ============================================================
 
 std::string CryptoCore::GenerateKey() {
@@ -160,7 +161,7 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
         return std::string();
     }
 
-    // 生成随机 IV (12 字节 for GCM)
+    // CN: 生成随机 IV（12 字节用于 GCM）| EN: Generate random IV (12 bytes for GCM)
     std::string iv(12, '\0');
 #ifdef _WIN32
     NTSTATUS status = BCryptGenRandom(
@@ -178,7 +179,7 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
     }
 #endif
 
-    // 加密
+    // CN: 加密 | EN: Encryption
     std::string ciphertext(plaintext.size() + 16, '\0');  // +16 for GCM tag
     
 #ifdef _WIN32
@@ -218,7 +219,7 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
         return std::string();
     }
     
-    ciphertext.resize(plaintext.size());  // 只保留 ciphertext，tag 在后面
+    ciphertext.resize(plaintext.size());  // CN: 只保留 ciphertext，tag 在后面 | EN: Keep only ciphertext, tag follows
 #else
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if (!ctx) return std::string();
@@ -246,18 +247,18 @@ std::string CryptoCore::Encrypt(const std::string& plaintext, const std::string&
     }
     ciphertext_len += len;
     
-    // 获取 GCM tag
+    // CN: 获取 GCM tag | EN: Get GCM tag
     unsigned char tag[16];
     EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, tag);
     
     EVP_CIPHER_CTX_free(ctx);
     
     ciphertext.resize(ciphertext_len);
-    // 附加 tag 到 ciphertext
+    // CN: 附加 tag 到 ciphertext | EN: Append tag to ciphertext
     ciphertext.append(reinterpret_cast<char*>(tag), 16);
 #endif
 
-    // 组装输出：IV + Ciphertext + Tag
+    // CN: 组装输出：IV + Ciphertext + Tag | EN: Assemble output: IV + Ciphertext + Tag
     std::string output = iv + ciphertext;
     return Base64Encode(reinterpret_cast<const uint8_t*>(output.data()), output.size());
 }
@@ -267,16 +268,16 @@ std::string CryptoCore::Decrypt(const std::string& base64Cipher, const std::stri
         return std::string();
     }
 
-    // Base64 解码
+    // CN: Base64 解码 | EN: Base64 decode
     auto decoded = Base64Decode(base64Cipher);
-    if (decoded.size() < 12 + 16) {  // 至少 IV(12) + Tag(16)
+    if (decoded.size() < 12 + 16) {  // CN: 至少 IV(12) + Tag(16) | EN: At least IV(12) + Tag(16)
         return std::string();
     }
 
-    // 提取 IV
+    // CN: 提取 IV | EN: Extract IV
     std::string iv(decoded.begin(), decoded.begin() + 12);
     
-    // 提取 Ciphertext + Tag
+    // CN: 提取 Ciphertext + Tag | EN: Extract Ciphertext + Tag
     std::string cipherWithTag(decoded.begin() + 12, decoded.end());
     std::string ciphertext(cipherWithTag.begin(), cipherWithTag.end() - 16);
     std::string tag(cipherWithTag.end() - 16, cipherWithTag.end());
@@ -343,7 +344,7 @@ std::string CryptoCore::Decrypt(const std::string& base64Cipher, const std::stri
     }
     plaintext_len = len;
     
-    // 设置 GCM tag
+    // CN: 设置 GCM tag | EN: Set GCM tag
     EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, tag.data());
     
     if (EVP_DecryptFinal_ex(ctx, (unsigned char*)plaintext.data() + plaintext_len, &len) != 1) {
@@ -363,7 +364,7 @@ std::string CryptoCore::DeriveKeyFromPassword(const std::string& password, const
     std::string key(32, '\0');
     
 #ifdef _WIN32
-    // 使用 BCrypt 的 PBKDF2 实现
+    // CN: 使用 BCrypt 的 PBKDF2 实现 | EN: Use BCrypt's PBKDF2 implementation
     BCRYPT_ALG_HANDLE hAlg = nullptr;
     NTSTATUS status = BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_PBKDF2_ALGORITHM, nullptr, 0);
     if (BCRYPT_SUCCESS(status)) {
