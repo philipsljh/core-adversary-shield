@@ -1,3 +1,5 @@
+[简体中文](README_CN.md) | [English](README.md)
+
 # Core Security Client (CSC) - Enterprise Policy Orchestration Framework
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
