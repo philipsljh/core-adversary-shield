@@ -233,15 +233,22 @@ void RuntimeEnvironmentValidator::secureErase() {
 // CN: 辅助函数 | EN: Helper Functions
 // ============================================================================
 
-void SecureErase(void* ptr, size_t size) {
+void SecureErase(volatile void* ptr, size_t size) {
+    // CN: 接受 volatile 指针以保证反调试/反作弊遥测指标在物理内存级的即时阅后即焚，volatile 限定符绝不丢失
+    // EN: Accept volatile void pointer to guarantee immediate memory annihilation for anti-tamper/anti-cheat telemetry at physical memory level, volatile qualifier must never be dropped
     if (!ptr || size == 0) return;
 
 #ifdef _WIN32
-    // CN: Windows: 使用 SecureZeroMemory（保证不被编译器优化）| EN: Windows: Uses SecureZeroMemory (guaranteed not to be optimized by compiler)
-    SecureZeroMemory(ptr, size);
+    // CN: Windows: 使用 const_cast 剥离 volatile 后传给 SecureZeroMemory（保证不被编译器优化）
+    // EN: Windows: Strip volatile via const_cast then pass to SecureZeroMemory (guaranteed not to be optimized by compiler)
+    SecureZeroMemory(const_cast<void*>(ptr), size);
 #else
-    // CN: Linux: 使用 explicit_bzero（C11 标准，保证不被优化）| EN: Linux: Uses explicit_bzero (C11 standard, guaranteed not to be optimized)
-    explicit_bzero(ptr, size);
+    // CN: Linux: 使用 volatile unsigned char* 实施循环擦除（保证不被优化）
+    // EN: Linux: Use volatile unsigned char* to perform loop wiping (guaranteed not to be optimized)
+    volatile unsigned char* p = reinterpret_cast<volatile unsigned char*>(ptr);
+    while (size--) {
+        *p++ = 0;
+    }
 #endif
 }
 

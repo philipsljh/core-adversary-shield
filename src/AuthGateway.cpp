@@ -87,6 +87,11 @@ ResultT<AuthResponse> AuthGateway::authenticate(const AuthRequest& request,
 ResultT<HeartbeatResponse> AuthGateway::heartbeat(const HeartbeatRequest& request,
                                                     const std::string& sessionKey,
                                                     DisplaySnapshot& snapshot) {
+    // CN: 显式消除未引用参数警告，通过 /WX 烈度编译门禁
+    // EN: Explicitly suppress unused parameter warnings to pass /WX strict compilation gate
+    (void)request;
+    (void)sessionKey;
+
     // CN: 【安全空转】开源版本返回模拟成功结果 | EN: [Secure stub] Open-source version returns simulated success result
     // CN: 生产版本实现：| EN: Production version implementation:
     // 1. CN: 构建心跳请求 JSON | EN: Build heartbeat request JSON
@@ -108,8 +113,12 @@ ResultT<HeartbeatResponse> AuthGateway::heartbeat(const HeartbeatRequest& reques
 }
 
 Result AuthGateway::changeCredential(const std::string& oldCredential,
-                                      const std::string& newCredential,
-                                      EnforcementContext& ctx) {
+                                       const std::string& newCredential,
+                                       EnforcementContext& ctx) {
+    // CN: 显式消除未引用参数警告，通过 /WX 烈度编译门禁
+    // EN: Explicitly suppress unused parameter warnings to pass /WX strict compilation gate
+    (void)newCredential;
+
     // CN: 【安全空转】开源版本返回模拟成功结果 | EN: [Secure stub] Open-source version returns simulated success result
     // CN: 生产版本实现：| EN: Production version implementation:
     // 1. CN: 验证旧凭证 | EN: Validate old credential

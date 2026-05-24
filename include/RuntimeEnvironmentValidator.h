@@ -229,10 +229,10 @@ private:
 // ============================================================================
 
 /**
- * @brief CN: 强制内存擦除 | EN: Force memory erasure
- * @param ptr CN: 内存指针 | EN: Memory pointer
+ * @brief CN: 强制内存擦除 - 接受 volatile 指针以保证反调试/反作弊遥测指标在物理内存级的即时阅后即焚
+ * @param ptr CN: 内存指针（volatile 防止编译器优化）| EN: Memory pointer (volatile prevents compiler optimization)
  * @param size CN: 字节数 | EN: Number of bytes
  */
-void SecureErase(void* ptr, size_t size);
+void SecureErase(volatile void* ptr, size_t size);
 
 } // namespace csc

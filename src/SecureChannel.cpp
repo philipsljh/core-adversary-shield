@@ -21,6 +21,11 @@
 #ifdef _WIN32
     #include <windows.h>
     #include <bcrypt.h>
+    // CN: 显式定义 NTSTATUS 失败码，防止某些 Windows SDK 版本中 STATUS_UNSUCCESSFUL 未声明导致编译阻断
+    // EN: Explicitly define NTSTATUS failure code to prevent compilation blocker when STATUS_UNSUCCESSFUL is undeclared in some Windows SDK versions
+    #ifndef STATUS_UNSUCCESSFUL
+    #define STATUS_UNSUCCESSFUL ((NTSTATUS)0xC0000001L)
+    #endif
 #else
     #include <openssl/evp.h>
     #include <openssl/rsa.h>
@@ -233,8 +238,11 @@ bool SecureChannel::AesGcmEncrypt(const uint8_t* key, const uint8_t* iv,
         authInfo.pbTag = tag;
         authInfo.cbTag = AES_GCM_TAG_LEN;
 
+        // CN: 安全剥离 plaintext.data() 的 const 限定符并正确转型为 PUCHAR，对齐标准 10 参数 CNG API 签名
+        // EN: Safely strip const qualifier from plaintext.data() and cast to PUCHAR, aligning with standard 10-parameter CNG API signature
         ULONG cbResult = 0;
-        status = BCryptEncrypt(hKey, const_cast<PUCHAR>(reinterpret_cast<const PUCHAR>(plaintext.data())),
+        status = BCryptEncrypt(hKey,
+            reinterpret_cast<PUCHAR>(const_cast<char*>(plaintext.data())),
             static_cast<ULONG>(plaintext.size()), &authInfo, nullptr, 0,
             ciphertext.data(), static_cast<ULONG>(ciphertext.size()), &cbResult, 0);
 
@@ -378,9 +386,10 @@ bool SecureChannel::RsaEncrypt(const std::string& publicKeyPEM,
         // CN: 注意：此处需要完整的 PEM 解析逻辑 | EN: Note: Full PEM parsing logic needed here
         // CN: 为简化，此处假设 publicKeyPEM 已经是 BCRYPT_RSAPUBLIC_BLOB 格式 | EN: For simplicity, assumes publicKeyPEM is already in BCRYPT_RSAPUBLIC_BLOB format
 
-        // CN: 导入公钥 | EN: Import public key
+        // CN: 导入公钥 - 修正指针转型链，使用 const_cast<char*> 剥离 const 后转型为 PUCHAR，严密对齐 7 参数 API 定义
+        // EN: Import public key - Fix pointer cast chain, use const_cast<char*> to strip const then cast to PUCHAR, strictly aligning with 7-parameter API definition
         status = BCryptImportKeyPair(hAlg, nullptr, BCRYPT_RSAPUBLIC_BLOB, &hKey,
-            const_cast<PUCHAR>(reinterpret_cast<const PUCHAR>(publicKeyPEM.data())),
+            reinterpret_cast<PUCHAR>(const_cast<char*>(publicKeyPEM.data())),
             static_cast<ULONG>(publicKeyPEM.size()), 0);
         if (!BCRYPT_SUCCESS(status)) break;
 
@@ -464,9 +473,10 @@ bool SecureChannel::RsaDecrypt(const std::string& privateKeyPEM,
         status = BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_RSA_ALGORITHM, nullptr, 0);
         if (!BCRYPT_SUCCESS(status)) break;
 
-        // CN: 解析 PEM 私钥（简化实现）| EN: Parse PEM private key (simplified implementation)
+        // CN: 解析 PEM 私钥 - 修正指针转型链，使用 const_cast<char*> 剥离 const 后转型为 PUCHAR，严密对齐 7 参数 API 定义
+        // EN: Parse PEM private key - Fix pointer cast chain, use const_cast<char*> to strip const then cast to PUCHAR, strictly aligning with 7-parameter API definition
         status = BCryptImportKeyPair(hAlg, nullptr, BCRYPT_RSAFULLPRIVATE_BLOB, &hKey,
-            const_cast<PUCHAR>(reinterpret_cast<const PUCHAR>(privateKeyPEM.data())),
+            reinterpret_cast<PUCHAR>(const_cast<char*>(privateKeyPEM.data())),
             static_cast<ULONG>(privateKeyPEM.size()), 0);
         if (!BCRYPT_SUCCESS(status)) break;
 

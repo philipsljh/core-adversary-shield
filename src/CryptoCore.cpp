@@ -18,6 +18,11 @@
 #ifdef _WIN32
     #include <windows.h>
     #include <bcrypt.h>
+    // CN: 显式定义 NTSTATUS 失败码，防止某些 Windows SDK 版本中 STATUS_UNSUCCESSFUL 未声明导致编译阻断
+    // EN: Explicitly define NTSTATUS failure code to prevent compilation blocker when STATUS_UNSUCCESSFUL is undeclared in some Windows SDK versions
+    #ifndef STATUS_UNSUCCESSFUL
+    #define STATUS_UNSUCCESSFUL ((NTSTATUS)0xC0000001L)
+    #endif
 #else
     #include <openssl/evp.h>
     #include <openssl/rand.h>
@@ -288,6 +293,9 @@ std::string CryptoCore::Decrypt(const std::string& base64Cipher, const std::stri
     BCRYPT_ALG_HANDLE hAlg = nullptr;
     BCRYPT_KEY_HANDLE hKey = nullptr;
     NTSTATUS status = STATUS_UNSUCCESSFUL;
+    // CN: 将 cbResult 提升到 do 块外部，确保后续 plaintext.resize(cbResult) 能正确访问，修复作用域逃逸
+    // EN: Elevate cbResult outside the do-block to ensure subsequent plaintext.resize(cbResult) can access it, fixing scope escape
+    ULONG cbResult = 0;
     
     do {
         status = BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_AES_ALGORITHM, nullptr, 0);
@@ -309,7 +317,6 @@ std::string CryptoCore::Decrypt(const std::string& base64Cipher, const std::stri
         authInfo.pbTag = (PUCHAR)tag.data();
         authInfo.cbTag = tag.size();
         
-        ULONG cbResult = 0;
         status = BCryptDecrypt(hKey, (PUCHAR)ciphertext.data(), ciphertext.size(),
             &authInfo, nullptr, 0, (PUCHAR)plaintext.data(), plaintext.size(), &cbResult, 0);
         
