@@ -226,9 +226,9 @@ Contributions are welcome! Please read our contributing guidelines and submit pu
 
 ## Disclaimer
 
-> **🔧 架构解耦说明 (Architecture Stub Notice)**:
-> 开源版本中的 `AuthGateway` 采用安全空转（Stub）实现并返回标准 Mock 响应，旨在展示全栈通信流契约。
-> 生产环境部署时，请根据组织内部实际的基础设施（如 WinHTTP、cURL 传输层及企业级 API 网关）自行接入真实的物理网络分发链。
+> **🔧 Architecture Stub Notice**:
+> The `AuthGateway` in this open-source release employs a secure stub implementation that returns standard Mock responses, designed to demonstrate the full-stack communication contract.
+> For production deployment, please integrate with your organization's actual infrastructure (such as WinHTTP, cURL transport layer, and enterprise API gateway) to connect to the real physical network distribution chain.
 
 This is a **reference implementation** for educational and architectural demonstration purposes. Production deployments should:
 
