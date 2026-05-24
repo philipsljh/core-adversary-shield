@@ -53,7 +53,7 @@ enum class PoisonState {
 };
 
 // ============================================================================
-// SecureKeyContext - XOR 混淆密钥存储
+// XorKeyStorage - XOR 混淆密钥存储
 // ============================================================================
 
 /**
@@ -69,10 +69,10 @@ enum class PoisonState {
  * - 所有敏感数据在析构时强制擦除
  * - 使用 SecureZeroMemory 防止编译器优化
  */
-class SecureKeyContext {
+class XorKeyStorage {
 public:
-    SecureKeyContext();
-    ~SecureKeyContext();
+    XorKeyStorage();
+    ~XorKeyStorage();
 
     /**
      * @brief 存储密钥（XOR 混淆）

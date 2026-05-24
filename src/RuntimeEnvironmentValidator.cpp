@@ -29,10 +29,10 @@
 namespace csc {
 
 // ============================================================================
-// SecureKeyContext 实现
+// XorKeyStorage 实现
 // ============================================================================
 
-SecureKeyContext::SecureKeyContext() {
+XorKeyStorage::XorKeyStorage() {
     // 初始化 shadowBuffer 为随机噪声
 #ifdef _WIN32
     HCRYPTPROV hProv = 0;
@@ -51,13 +51,13 @@ SecureKeyContext::SecureKeyContext() {
 #endif
 }
 
-SecureKeyContext::~SecureKeyContext() {
+XorKeyStorage::~XorKeyStorage() {
     // 析构时强制擦除
     SecureErase(shadowBuffer, sizeof(shadowBuffer));
     SecureErase(entropyMask, sizeof(entropyMask));
 }
 
-void SecureKeyContext::storeKey(const uint8_t* key, size_t length) {
+void XorKeyStorage::storeKey(const uint8_t* key, size_t length) {
     if (!key || length == 0 || length > sizeof(shadowBuffer)) return;
     
     // XOR 混淆存储：shadowBuffer[i] = key[i] ^ entropyMask[i]
@@ -67,7 +67,7 @@ void SecureKeyContext::storeKey(const uint8_t* key, size_t length) {
     storedLength = length;
 }
 
-bool SecureKeyContext::recoverKey(uint8_t* outBuffer, size_t outLength) {
+bool XorKeyStorage::recoverKey(uint8_t* outBuffer, size_t outLength) {
     if (!outBuffer || outLength < storedLength || storedLength == 0) return false;
     
     // 栈帧内 XOR 还原：key[i] = shadowBuffer[i] ^ entropyMask[i]
@@ -78,7 +78,7 @@ bool SecureKeyContext::recoverKey(uint8_t* outBuffer, size_t outLength) {
     return true;
 }
 
-void SecureKeyContext::poison() {
+void XorKeyStorage::poison() {
     // 比特位翻转投毒：翻转 shadowBuffer 的随机位
     // 使后续 recoverKey() 返回脏数据，通信自然失效
     if (storedLength > 0) {
@@ -91,7 +91,7 @@ void SecureKeyContext::poison() {
     }
 }
 
-void SecureKeyContext::secureErase() {
+void XorKeyStorage::secureErase() {
     SecureErase(shadowBuffer, sizeof(shadowBuffer));
     SecureErase(entropyMask, sizeof(entropyMask));
     storedLength = 0;

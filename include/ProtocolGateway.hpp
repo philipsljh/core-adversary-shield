@@ -328,7 +328,7 @@ public:
         // 实际项目中可能需要根据服务端实现调整解密逻辑
         DecryptedPayload decrypted = SecureChannel::Decrypt(responseBody, rsaPublicKeyPEM);
         
-        if (!decrypted.valid) {
+        if (!decrypted.success) {
             // 解密失败 → D 类错误（可能是数据被篡改）
             return ResultT<Response>::TamperedEnv(0, "响应数据校验失败");
         }
@@ -433,7 +433,7 @@ public:
         // 解密（使用私钥）
         DecryptedPayload decrypted = SecureChannel::Decrypt(responseBody, rsaPrivateKeyPEM);
         
-        if (!decrypted.valid) {
+        if (!decrypted.success) {
             return ResultT<Response>::TamperedEnv(0, "响应数据校验失败");
         }
         
