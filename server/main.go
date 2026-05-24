@@ -1,6 +1,10 @@
 // main.go
-// Core Security Server - minimal demo entry point
-// Demonstrates end-to-end PoW middleware and Ed25519 signature issuance
+// Enterprise Policy Orchestration Server - Entry Point
+//
+// This server implements a zero-trust policy orchestration framework with:
+// - Onion-model middleware pipeline (BaseInfo -> VerifyPoW -> Ticket)
+// - Ed25519 blind oracle digital signature issuance
+// - SQLite WAL industrial-grade deadlock-free write shell with exponential backoff
 //
 // Start:
 //   go run main.go
@@ -8,8 +12,8 @@
 // Production:
 //   go build -o server && ./server
 //
-// Dev mode (not recommended for production):
-//   RXXL_DEV_MODE=1 go run main.go
+// Dev mode (for testing only):
+//   POLICY_SERVER_DEV_MODE=1 go run main.go
 
 package main
 
@@ -30,6 +34,7 @@ import (
 // ============================================================================
 
 // BaseInfoMiddleware extracts real client IP and injects into context
+// This is the first layer of the onion-model middleware pipeline
 func BaseInfoMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientIP := utils.ExtractClientIP(r)
@@ -42,10 +47,11 @@ func BaseInfoMiddleware(next http.Handler) http.Handler {
 // Business Handler
 // ============================================================================
 
-// Handler defines business processors
+// Handler defines business processors for policy orchestration
 type Handler struct{}
 
 // HandleGetTicket returns PoW Ticket to client
+// This endpoint issues a computational challenge for rate limiting
 func (h *Handler) HandleGetTicket(w http.ResponseWriter, r *http.Request) {
 	clientIP := utils.GetContextValue(r, utils.ClientIPKey)
 
@@ -68,7 +74,7 @@ type HeartbeatRequest struct {
 	SessionToken string `json:"session_token"`
 }
 
-// HandleHeartbeat heartbeat endpoint: returns Ed25519 signature
+// HandleHeartbeat heartbeat endpoint: returns Ed25519 oracle signature
 // Dynamically extracts parameters from request body
 func (h *Handler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	clientIP := utils.GetContextValue(r, utils.ClientIPKey)
@@ -90,17 +96,17 @@ func (h *Handler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	expireTime := time.Now().Add(5 * time.Minute).Unix()
 
-	// Load scriptHash from environment variable to avoid static feature exposure
-	scriptHash := os.Getenv("RXXL_SCRIPT_HASH")
-	if scriptHash == "" {
-		slog.Warn("[Heartbeat] RXXL_SCRIPT_HASH not set, using noise placeholder. " +
-			"Production MUST set this environment variable to the actual script bytecode hash.")
-		scriptHash = "a3f8b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1"
+	// Load policy hash from environment variable to avoid static feature exposure
+	policyHash := os.Getenv("POLICY_SERVER_RESOURCE_HASH")
+	if policyHash == "" {
+		slog.Warn("[Heartbeat] POLICY_SERVER_RESOURCE_HASH not set, using noise placeholder. " +
+			"Production MUST set this environment variable to the actual resource bytecode hash.")
+		policyHash = "0000000000000000000000000000000000000000000000000000000000000000"
 	}
 
-	signature, err := middleware.SignOracle(req.Username, req.Nonce, expireTime, scriptHash)
+	signature, err := middleware.SignOracle(req.Username, req.Nonce, expireTime, policyHash)
 	if err != nil {
-		utils.AdminLog.Error("HEARTBEAT_SIGN_FAIL",
+		utils.AdminLog.Error("ORACLE_SIGN_FAIL",
 			"error", err,
 			"ip", clientIP)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -117,10 +123,10 @@ func (h *Handler) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		"server_sign":      signature,
 		"nonce":            req.Nonce,
 		"expire_timestamp": fmt.Sprintf("%d", expireTime),
-		"script_hash":      scriptHash,
+		"resource_hash":    policyHash,
 	})
 
-	utils.AdminLog.Info("HEARTBEAT_SUCCESS",
+	utils.AdminLog.Info("ORACLE_SIGN_SUCCESS",
 		"username", req.Username,
 		"ip", clientIP)
 }
@@ -138,13 +144,13 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	slog.Info("========================================")
-	slog.Info("Core Security Server - Starting")
+	slog.Info("Enterprise Policy Orchestration Server - Starting")
 	slog.Info("========================================")
 
 	pubKey := middleware.GetOraclePublicKey()
 	if pubKey == "" {
 		slog.Error("[Main] FATAL: Oracle Signer not ready. " +
-			"Set RXXL_ED25519_PRIVATE_KEY (production) or RXXL_DEV_MODE=1 (development)")
+			"Set POLICY_SERVER_ED25519_PRIVATE_KEY (production) or POLICY_SERVER_DEV_MODE=1 (development)")
 		slog.Error("[Main] Server exiting.")
 		return
 	}
@@ -156,9 +162,11 @@ func main() {
 
 	mux.HandleFunc("/health", handler.HandleHealth)
 
+	// Onion-model middleware pipeline: BaseInfo -> Handler
 	mux.Handle("/api/v1/pow/ticket",
 		BaseInfoMiddleware(http.HandlerFunc(handler.HandleGetTicket)))
 
+	// Onion-model middleware pipeline: BaseInfo -> VerifyPoW -> Handler
 	mux.Handle("/api/v1/auth/heartbeat",
 		BaseInfoMiddleware(
 			middleware.VerifyPoW(

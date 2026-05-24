@@ -1,7 +1,11 @@
 // oracle_signer.go
 // Ed25519 Oracle Signer - Stateless Signing Component
-// Used for signing heartbeat verification, rebind tickets, and other core business signatures
-// Private key is read from environment variable, never hardcoded
+//
+// This module implements the blind oracle digital signature mechanism
+// for policy verification and session attestation.
+//
+// Private key is read from environment variable, never hardcoded.
+// All sensitive material is subject to garbage collection after use.
 
 package middleware
 
@@ -11,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
 	"sync"
 )
 
@@ -31,17 +36,18 @@ var (
 // ============================================================================
 
 // OraclePayload defines the concatenation order for signing payloads
+// Format: "identifier|nonce|expire_timestamp|resource_hash"
 type OraclePayload struct {
-	Username   string
-	Nonce      string
-	ExpireTime int64
-	ScriptHash string
+	Identifier   string
+	Nonce        string
+	ExpireTime   int64
+	ResourceHash string
 }
 
 // String concatenates the payload into a standard compact byte stream
-// Format: "username|nonce|expire_timestamp|script_hash"
+// Format: "identifier|nonce|expire_timestamp|resource_hash"
 func (p *OraclePayload) String() string {
-	return fmt.Sprintf("%s|%s|%d|%s", p.Username, p.Nonce, p.ExpireTime, p.ScriptHash)
+	return fmt.Sprintf("%s|%s|%d|%s", p.Identifier, p.Nonce, p.ExpireTime, p.ResourceHash)
 }
 
 // ============================================================================
@@ -49,12 +55,12 @@ func (p *OraclePayload) String() string {
 // ============================================================================
 
 // initOracleKeys loads Ed25519 key pair from environment variable
-// Production requires RXXL_ED25519_PRIVATE_KEY, dev mode generates temp keys
+// Production requires POLICY_SERVER_ED25519_PRIVATE_KEY, dev mode generates temp keys
 func initOracleKeys() {
-	privStr := os.Getenv("RXXL_ED25519_PRIVATE_KEY")
+	privStr := os.Getenv("POLICY_SERVER_ED25519_PRIVATE_KEY")
 
 	if privStr == "" {
-		isDevMode := os.Getenv("RXXL_DEV_MODE") == "1"
+		isDevMode := os.Getenv("POLICY_SERVER_DEV_MODE") == "1"
 
 		if isDevMode {
 			slog.Warn("[Oracle] DEVELOPMENT MODE - Using temporary Ed25519 key pair",
@@ -73,9 +79,9 @@ func initOracleKeys() {
 			return
 		}
 
-		slog.Error("[Oracle] FATAL: RXXL_ED25519_PRIVATE_KEY required in production. " +
-			"Set RXXL_DEV_MODE=1 for development.")
-		oracleInitErr = fmt.Errorf("RXXL_ED25519_PRIVATE_KEY required in production")
+		slog.Error("[Oracle] FATAL: POLICY_SERVER_ED25519_PRIVATE_KEY required in production. " +
+			"Set POLICY_SERVER_DEV_MODE=1 for development.")
+		oracleInitErr = fmt.Errorf("POLICY_SERVER_ED25519_PRIVATE_KEY required in production")
 		return
 	}
 
@@ -110,13 +116,18 @@ func GetOraclePublicKey() string {
 
 // SignOracle signs a specified payload using Ed25519
 // Returns Base64 encoded signature
-func SignOracle(username, nonce string, expireTime int64, scriptHash string) (string, error) {
+//
+// Memory Ephemeral Principle:
+// All intermediate byte slices are subject to garbage collection after use.
+// Production deployments should consider using explicit memory wiping for
+// compliance with high-security requirements.
+func SignOracle(identifier, nonce string, expireTime int64, resourceHash string) (string, error) {
 	oracleInitOnce.Do(initOracleKeys)
 	if oracleInitErr != nil {
 		return "", fmt.Errorf("oracle signer not ready: %v", oracleInitErr)
 	}
 
-	if username == "" || nonce == "" || scriptHash == "" {
+	if identifier == "" || nonce == "" || resourceHash == "" {
 		return "", fmt.Errorf("signing parameters cannot be empty")
 	}
 
@@ -125,20 +136,26 @@ func SignOracle(username, nonce string, expireTime int64, scriptHash string) (st
 	}
 
 	payload := &OraclePayload{
-		Username:   username,
-		Nonce:      nonce,
-		ExpireTime: expireTime,
-		ScriptHash: scriptHash,
+		Identifier:   identifier,
+		Nonce:        nonce,
+		ExpireTime:   expireTime,
+		ResourceHash: resourceHash,
 	}
 	payloadBytes := []byte(payload.String())
 
 	signature := ed25519.Sign(oraclePrivateKey, payloadBytes)
 
+	// Memory Ephemeral: clear payload bytes after signing
+	for i := range payloadBytes {
+		payloadBytes[i] = 0
+	}
+	runtime.GC() // Trigger garbage collection for sensitive material
+
 	return base64.StdEncoding.EncodeToString(signature), nil
 }
 
 // VerifyOracle verifies an Ed25519 signature
-func VerifyOracle(username, nonce string, expireTime int64, scriptHash, signatureBase64 string) bool {
+func VerifyOracle(identifier, nonce string, expireTime int64, resourceHash, signatureBase64 string) bool {
 	oracleInitOnce.Do(initOracleKeys)
 	if oraclePublicKey == nil {
 		slog.Error("[Oracle] Verify failed: public key not initialized")
@@ -155,14 +172,21 @@ func VerifyOracle(username, nonce string, expireTime int64, scriptHash, signatur
 	}
 
 	payload := &OraclePayload{
-		Username:   username,
-		Nonce:      nonce,
-		ExpireTime: expireTime,
-		ScriptHash: scriptHash,
+		Identifier:   identifier,
+		Nonce:        nonce,
+		ExpireTime:   expireTime,
+		ResourceHash: resourceHash,
 	}
 	payloadBytes := []byte(payload.String())
 
-	return ed25519.Verify(oraclePublicKey, payloadBytes, signature)
+	result := ed25519.Verify(oraclePublicKey, payloadBytes, signature)
+
+	// Memory Ephemeral: clear payload bytes after verification
+	for i := range payloadBytes {
+		payloadBytes[i] = 0
+	}
+
+	return result
 }
 
 // ============================================================================

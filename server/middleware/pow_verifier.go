@@ -1,6 +1,11 @@
 // pow_verifier.go
-// Proof of Work (PoW) verification middleware
-// Intercepts illegal requests, forces clients to pay CPU cost, prevents brute force and flood attacks
+// Computational Challenge Verification Middleware
+//
+// This module implements a proof-of-work (PoW) based rate limiting mechanism
+// for protecting API endpoints from brute force and flood attacks.
+//
+// The middleware intercepts requests, forces clients to pay a CPU cost,
+// and verifies the computational challenge before allowing access.
 
 package middleware
 
@@ -17,7 +22,7 @@ import (
 	"server/internal/utils"
 )
 
-// PoWConfig defines proof of work difficulty parameters and time window
+// PoWConfig defines computational challenge difficulty parameters and time window
 type PoWConfig struct {
 	// LeadingZeros requires SHA256 hash prefix zero hex character count
 	// 4 characters = 16 bits, average needs 2^16 = 65536 hash attempts
@@ -143,7 +148,8 @@ func (rl *ipRateLimiter) CleanupExpiredEntries() {
 	}
 }
 
-// globalPoWRatelimiter enforces per-IP PoW rate limiting (100 requests per 60 seconds)
+// globalPoWRatelimiter enforces per-IP computational challenge rate limiting
+// (100 requests per 60 seconds)
 var globalPoWRatelimiter = &ipRateLimiter{
 	requests: make(map[string]*ipCounter),
 	maxReqs:  100,
@@ -161,21 +167,23 @@ func init() {
 	}()
 }
 
-// VerifyPoW proof of work verification middleware
-// Extracts Ticket, Nonce and Answer from request headers, verifies SHA256(Ticket + Nonce + Answer) meets leading zero requirement
-// Returns 400 Bad Request on failure, does not pass through
+// VerifyPoW computational challenge verification middleware
+//
+// Extracts Ticket, Nonce and Answer from request headers,
+// verifies SHA256(Ticket + Nonce + Answer) meets leading zero requirement.
+// Returns 400 Bad Request on failure, does not pass through.
 func VerifyPoW(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientIP := utils.GetContextValue(r, utils.ClientIPKey)
 
-		// Rate limit check: reject flood requests before PoW verification
+		// Rate limit check: reject flood requests before challenge verification
 		if !globalPoWRatelimiter.Allow(clientIP) {
-			utils.AdminLog.Warn("POW_RATE_LIMIT",
-				"reason", "IP exceeded PoW rate limit",
+			utils.AdminLog.Warn("CHALLENGE_RATE_LIMIT",
+				"reason", "IP exceeded computational challenge rate limit",
 				"ip", clientIP)
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusTooManyRequests)
-			fmt.Fprintf(w, `{"code":429,"msg":"PoW rate limit exceeded, please slow down"}`)
+			fmt.Fprintf(w, `{"code":429,"msg":"Rate limit exceeded, please slow down"}`)
 			return
 		}
 
@@ -184,26 +192,26 @@ func VerifyPoW(next http.Handler) http.Handler {
 		answer := r.Header.Get("X-PoW-Answer")
 
 		if ticket == "" || nonce == "" || answer == "" {
-			utils.AdminLog.Warn("POW_MISSING",
-				"reason", "missing PoW credentials",
+			utils.AdminLog.Warn("CHALLENGE_MISSING",
+				"reason", "missing computational challenge credentials",
 				"ticket_len", len(ticket),
 				"nonce_len", len(nonce),
 				"answer_len", len(answer),
 				"ip", clientIP)
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, `{"code":400,"msg":"Missing PoW credentials"}`)
+			fmt.Fprintf(w, `{"code":400,"msg":"Missing challenge credentials"}`)
 			return
 		}
 
 		cfg := DefaultPoWConfig()
 		if !globalTicketTracker.IsValid(ticket, cfg.TicketTTL) {
-			utils.AdminLog.Warn("POW_TICKET_INVALID",
+			utils.AdminLog.Warn("CHALLENGE_TICKET_INVALID",
 				"reason", "ticket invalid or expired",
 				"ip", clientIP)
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, `{"code":400,"msg":"PoW ticket invalid or expired"}`)
+			fmt.Fprintf(w, `{"code":400,"msg":"Challenge ticket invalid or expired"}`)
 			return
 		}
 
@@ -213,25 +221,26 @@ func VerifyPoW(next http.Handler) http.Handler {
 
 		expectedPrefix := strings.Repeat("0", cfg.LeadingZeros)
 		if !strings.HasPrefix(hashHex, expectedPrefix) {
-			utils.AdminLog.Warn("POW_CHALLENGE_FAIL",
-				"reason", "PoW challenge failed",
+			utils.AdminLog.Warn("CHALLENGE_VERIFY_FAIL",
+				"reason", "computational challenge failed",
 				"hash_prefix", hashHex[:16]+"...",
 				"expected_prefix", expectedPrefix,
 				"ip", clientIP)
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, `{"code":400,"msg":"PoW challenge failed"}`)
+			fmt.Fprintf(w, `{"code":400,"msg":"Computational challenge failed"}`)
 			return
 		}
 
-		utils.AdminLog.Info("POW_PASS",
+		utils.AdminLog.Info("CHALLENGE_PASS",
 			"ticket_prefix", maskTicket(ticket),
 			"ip", clientIP)
 		next.ServeHTTP(w, r)
 	})
 }
 
-// VerifyPoWSimple simplified PoW verification (for scenarios without ticket tracking)
+// VerifyPoWSimple simplified computational challenge verification
+// (for scenarios without ticket tracking)
 // Directly verifies SHA256(Nonce + Answer) meets leading zero requirement
 func VerifyPoWSimple(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -240,12 +249,12 @@ func VerifyPoWSimple(next http.Handler) http.Handler {
 		clientIP := utils.GetContextValue(r, utils.ClientIPKey)
 
 		if nonce == "" || answer == "" {
-			utils.AdminLog.Warn("POW_SIMPLE_MISSING",
-				"reason", "missing PoW credentials",
+			utils.AdminLog.Warn("CHALLENGE_SIMPLE_MISSING",
+				"reason", "missing computational challenge credentials",
 				"ip", clientIP)
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, `{"code":400,"msg":"Missing PoW credentials"}`)
+			fmt.Fprintf(w, `{"code":400,"msg":"Missing challenge credentials"}`)
 			return
 		}
 
@@ -255,24 +264,25 @@ func VerifyPoWSimple(next http.Handler) http.Handler {
 		cfg := DefaultPoWConfig()
 		expectedPrefix := strings.Repeat("0", cfg.LeadingZeros)
 		if !strings.HasPrefix(hashHex, expectedPrefix) {
-			utils.AdminLog.Warn("POW_SIMPLE_FAIL",
-				"reason", "PoW challenge failed",
+			utils.AdminLog.Warn("CHALLENGE_SIMPLE_FAIL",
+				"reason", "computational challenge failed",
 				"hash_prefix", hashHex[:16]+"...",
 				"ip", clientIP)
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, `{"code":400,"msg":"PoW challenge failed"}`)
+			fmt.Fprintf(w, `{"code":400,"msg":"Computational challenge failed"}`)
 			return
 		}
 
-		utils.AdminLog.Info("POW_SIMPLE_PASS",
+		utils.AdminLog.Info("CHALLENGE_SIMPLE_PASS",
 			"ip", clientIP)
 		next.ServeHTTP(w, r)
 	})
 }
 
-// IssueTicket issues a new PoW Ticket
-// Caller should distribute returned ticket to client, client carries this ticket in subsequent requests
+// IssueTicket issues a new computational challenge Ticket
+// Caller should distribute returned ticket to client,
+// client carries this ticket in subsequent requests
 func IssueTicket() string {
 	ticket := fmt.Sprintf("%d-%08x", time.Now().UnixNano(), uint32(time.Now().Nanosecond()))
 	globalTicketTracker.MarkIssued(ticket)
@@ -289,7 +299,7 @@ func maskTicket(ticket string) string {
 
 func init() {
 	cfg := DefaultPoWConfig()
-	slog.Info("[PoW] Middleware initialized",
+	slog.Info("[Challenge] Middleware initialized",
 		"leading_zeros", cfg.LeadingZeros,
 		"ticket_ttl_sec", cfg.TicketTTL.Seconds(),
 		"tracker_capacity", 100000)

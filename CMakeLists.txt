@@ -9,41 +9,31 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ============================================================================
-# 外部依赖：Crypto++ 静态库
+# 外部依赖：OpenSSL 或 Windows BCrypt
 # ============================================================================
-# 使用方法:
-#   1. 从 https://www.cryptopp.com/ 下载并编译 Crypto++
-#   2. 设置 CRYPTOPP_ROOT 环境变量或 CMake 变量指向 Crypto++ 安装目录
-#   3. 或者使用系统包管理器安装:
-#      - Ubuntu/Debian: sudo apt-get install libcrypto++-dev
-#      - Windows (vcpkg): vcpkg install cryptopp
+# 本开源版本使用跨平台密码学实现：
+# - Windows: 使用内置 BCrypt API（无需额外依赖）
+# - Linux/macOS: 需要 OpenSSL 3.x
 #
-# 示例:
-#   cmake -DCRYPTOPP_ROOT=/path/to/cryptopp ..
+# 使用方法:
+#   - Ubuntu/Debian: sudo apt-get install libssl-dev
+#   - macOS: brew install openssl
+#   - Windows: 无需额外依赖，使用内置 BCrypt
 # ============================================================================
 
-find_path(CRYPTOPP_INCLUDE_DIR
-    NAMES cryptopp/aes.h cryptopp/rsa.h
-    PATHS ${CRYPTOPP_ROOT} /usr/include /usr/local/include
-    PATH_SUFFIXES include
-)
+option(USE_OPENSSL "Use OpenSSL instead of Windows BCrypt" OFF)
 
-find_library(CRYPTOPP_LIBRARY
-    NAMES cryptopp libcrypto++
-    PATHS ${CRYPTOPP_ROOT} /usr/lib /usr/local/lib
-    PATH_SUFFIXES lib
-)
-
-if(NOT CRYPTOPP_INCLUDE_DIR)
-    message(FATAL_ERROR "Crypto++ headers not found. Set CRYPTOPP_ROOT or install libcrypto++-dev")
+if(WIN32 AND NOT USE_OPENSSL)
+    # Windows 平台使用内置 BCrypt，无需额外依赖
+    message(STATUS "Using Windows BCrypt for cryptographic operations")
+    set(CSC_CRYPTO_LIBS bcrypt)
+else()
+    # 非 Windows 平台或强制使用 OpenSSL
+    set(USE_OPENSSL ON)
+    find_package(OpenSSL REQUIRED)
+    message(STATUS "Using OpenSSL for cryptographic operations")
+    set(CSC_CRYPTO_LIBS OpenSSL::Crypto)
 endif()
-
-if(NOT CRYPTOPP_LIBRARY)
-    message(FATAL_ERROR "Crypto++ library not found. Set CRYPTOPP_ROOT or install libcrypto++-dev")
-endif()
-
-message(STATUS "Crypto++ include: ${CRYPTOPP_INCLUDE_DIR}")
-message(STATUS "Crypto++ library: ${CRYPTOPP_LIBRARY}")
 
 # ============================================================================
 # 源文件
@@ -51,17 +41,24 @@ message(STATUS "Crypto++ library: ${CRYPTOPP_LIBRARY}")
 set(CSC_HEADERS
     include/Result.h
     include/SecureChannel.h
+    include/CryptoCore.h
+    include/SecurityDef.h
+    include/AuthGateway.h
+    include/ApiRegistry.h
     include/ProtocolGateway.hpp
     include/RuntimeEnvironmentValidator.h
 )
 
 set(CSC_SOURCES
     src/SecureChannel.cpp
+    src/CryptoCore.cpp
+    src/AuthGateway.cpp
+    src/ApiRegistry.cpp
     src/RuntimeEnvironmentValidator.cpp
 )
 
 # ============================================================================
-# 示例可执行文件
+# 示例源文件
 # ============================================================================
 set(EXAMPLE_SOURCES
     examples/protocol_example.cpp
@@ -74,11 +71,10 @@ add_library(csc_core STATIC ${CSC_SOURCES})
 
 target_include_directories(csc_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CRYPTOPP_INCLUDE_DIR}
 )
 
 target_link_libraries(csc_core PUBLIC
-    ${CRYPTOPP_LIBRARY}
+    ${CSC_CRYPTO_LIBS}
 )
 
 # Windows 特定链接
@@ -95,10 +91,7 @@ target_compile_options(csc_core PRIVATE
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
 )
 
-# 彻底关闭 Crypto++ 异常支持，对齐"全面废弃异常"的设计哲学
-target_compile_definitions(csc_core PRIVATE CRYPTOPP_DISABLE_EXCEPTIONS)
-
-# 注入协议版本号编译宏，避免静态特征码暴露
+# 注入协议版本号编译宏
 # 生产环境可通过 -DCSC_PROTOCOL_VERSION="x.x.x" 覆盖
 if(NOT DEFINED CSC_PROTOCOL_VERSION)
     set(CSC_PROTOCOL_VERSION "2.0")

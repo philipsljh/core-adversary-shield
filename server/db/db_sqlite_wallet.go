@@ -1,7 +1,12 @@
 // db_sqlite_wallet.go
-// High-concurrency database deadlock isolation layer
-// Pure Go implementation of SQLite safe write wrapper with explicit BEGIN IMMEDIATE transactions
-// Implements exponential backoff retry with random jitter (20-80ms) on SQLITE_BUSY errors
+// High-concurrency Database Deadlock Isolation Layer
+//
+// Pure Go implementation of SQLite safe write wrapper with explicit
+// BEGIN IMMEDIATE transactions. Implements exponential backoff retry
+// with random jitter (20-80ms) on SQLITE_BUSY errors.
+//
+// This module provides industrial-grade deadlock-free write operations
+// for policy state persistence and audit log storage.
 
 package db
 
@@ -70,7 +75,8 @@ var (
 // Safe write wrapper
 // ============================================================================
 
-// SafeWrite executes a database write operation with automatic transaction and SQLITE_BUSY retry
+// SafeWrite executes a database write operation with automatic transaction
+// and SQLITE_BUSY retry with exponential backoff.
 func SafeWrite(operation func(tx *sql.Tx) error) error {
 	return SafeWriteWithContext(context.Background(), operation)
 }
@@ -193,10 +199,12 @@ func isBusyError(err error) bool {
 // Database initialization
 // ============================================================================
 
+// InitDB initializes the global database connection with default path
 func InitDB() error {
 	return InitDBWithPath(DefaultDBPath)
 }
 
+// InitDBWithPath initializes the global database connection with specified path
 func InitDBWithPath(dbPath string) error {
 	dbInitOnce.Do(func() {
 		dbInitErr = initDBInternal(dbPath)
@@ -238,10 +246,12 @@ func initDBInternal(dbPath string) error {
 // Convenience query functions (read-only, no transaction needed)
 // ============================================================================
 
+// QueryRowSafe executes a safe read-only query returning a single row
 func QueryRowSafe(query string, args ...interface{}) *sql.Row {
 	return DB.QueryRow(query, args...)
 }
 
+// ExecSafe executes a safe write operation wrapped in SafeWrite
 func ExecSafe(query string, args ...interface{}) error {
 	return SafeWrite(func(tx *sql.Tx) error {
 		_, err := tx.Exec(query, args...)
@@ -253,6 +263,7 @@ func ExecSafe(query string, args ...interface{}) error {
 // Graceful shutdown
 // ============================================================================
 
+// CloseDB gracefully closes the database connection
 func CloseDB() error {
 	if DB == nil {
 		return nil
