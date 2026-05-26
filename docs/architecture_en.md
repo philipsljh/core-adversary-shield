@@ -1,3 +1,6 @@
+> 📂 **Open-Source Core Repository**: [github.com/philipsljh/core-adversary-shield](https://github.com/philipsljh/core-adversary-shield)  
+> *(Note: The production-ready C++ execution engine, kernel-level IPC pipe, and architecture contracts elucidated in this whitepaper are fully available for source auditing in this repository.)*
+
 # 🚀 Core Security Client (CSC) — Architecture Specification & Technical Whitepaper
 
 > **Document Version**: v1.0.0  
@@ -182,4 +185,4 @@ The AI is completely insulated from global dependency noise, ensuring **100% pre
 
 ```
 
----
+
