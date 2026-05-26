@@ -1,4 +1,4 @@
-# ?? Core Security Client (CSC) — Architecture Specification & Technical Whitepaper
+# ?? Core Security Client (CSC) ?Architecture Specification & Technical Whitepaper
 
 > **Document Version**: v1.0.0  
 > **Release Date**: 2026-05  
@@ -12,9 +12,9 @@
 This document elucidates a **distributed security defense framework featuring edge-collaborative verification, high availability, and rigid isolation between client and server components**. Designed specifically for high-adversarial hostile environments, the core objective of this system is to construct an end-to-end zero-trust secure communication chain from the cloud-native edge gateway down to the in-process runtime execution engine within untrusted endpoint environments.
 
 The architecture abandons monolithic security configurations and bifurcates into three core logical domains:
-* **Universal Client Module** — Runs in the endpoint user-space as a security signaling proxy layer. It handles credential management, establishes hybrid encrypted communication tunnels, and orchestrates interactions with external edge infrastructure.
-* **Runtime Environment Validation Domain (Execution Engine / Injection Module)** — Dynamically embedded within the target process, provisioning import-table-free symbol resolution, native thread lifecycle hijacking, delayed randomized memory poisoning, and runtime code compliance auditing.
-* **Zero-Trust Edge Gateway** — Deployed across elastic cloud instances to anchor high-frequency, high-risk business endpoints. It integrates adaptive Proof-of-Work (PoW) computational rate-limiting, Ed25519 oracle signature issuance, and a resilient, lighter-weight storage engine fortified with exponential backoff algorithms.
+* **Universal Client Module** ?Runs in the endpoint user-space as a security signaling proxy layer. It handles credential management, establishes hybrid encrypted communication tunnels, and orchestrates interactions with external edge infrastructure.
+* **Runtime Environment Validation Domain (Execution Engine / Injection Module)** ?Dynamically embedded within the target process, provisioning import-table-free symbol resolution, native thread lifecycle hijacking, delayed randomized memory poisoning, and runtime code compliance auditing.
+* **Zero-Trust Edge Gateway** ?Deployed across elastic cloud instances to anchor high-frequency, high-risk business endpoints. It integrates adaptive Proof-of-Work (PoW) computational rate-limiting, Ed25519 oracle signature issuance, and a resilient, lighter-weight storage engine fortified with exponential backoff algorithms.
 
 ### ??? Core Design Philosophy
 
@@ -177,7 +177,7 @@ When adversaries thoroughly reverse-engineer client protocols and deploy automat
 
 ```
 [Layer 0: Edge Anti-Downgrade Middleware]
-    ??? Dynamic timestamp tolerance filtering (Locked within a ±120s physical line to crush replay vectors).
+    ??? Dynamic timestamp tolerance filtering (Locked within a ?20s physical line to crush replay vectors).
 
 [Layer 1: Adaptive Proof-of-Work Cut (VerifyPoW Middleware)]
     ??? Forces incoming headers to present a valid SHA-256 leading-zero Answer bound to a 20s TTL ticket.
