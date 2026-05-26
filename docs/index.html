@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>CAS Framework - Architecture Specification</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+  <meta name="description" content="A decoupled, zero-trust full-stack defense framework">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+  <style>
+    /* 优化顶部语言切换导航条的样式，使其具备工业级高级感 */
+    .app-nav {
+      position: fixed;
+      margin: 0;
+      padding: 10px 20px;
+      right: 20px;
+      top: 10px;
+      z-index: 100;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .app-nav a {
+      margin-left: 15px;
+      text-decoration: none;
+      color: #34495e;
+      transition: color 0.3s ease;
+    }
+    .app-nav a:hover {
+      color: #42b983;
+    }
+  </style>
+</head>
+<body>
+  <nav class="app-nav">
+    <a href="#/architecture_zh">简体中文</a>
+    <a href="#/architecture_en">English</a>
+  </nav>
+
+  <div id="app">正在加载安全架构白皮书... / Loading Infrastructure Specification...</div>
+
+  <script>
+    window.$docsify = {
+      name: 'CAS Framework',
+      repo: 'https://github.com/philipsljh/core-adversary-shield', 
+      
+      // 默认首页物理绑定到中文版白皮书，彻底告别根目录 README 冲突
+      homepage: 'architecture_zh.md',
+      
+      loadSidebar: false, 
+      auto2top: true,
+    }
+  </script>
+  <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
+</body>
+</html>
